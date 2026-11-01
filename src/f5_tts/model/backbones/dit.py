@@ -114,7 +114,11 @@ class TextEmbedding(nn.Module):
         # possible extra modeling
         if self.extra_modeling:
             # sinus pos emb; for variable seq lengths, only add positions within each sample's valid range.
-            freqs = self.freqs_cis[:max_seq_len, :]
+            # Clamp indices to the precomputed buffer length: slicing [:max_seq_len] would return
+            # fewer than max_seq_len rows once max_seq_len > precompute_max_pos (~87s), so `text + freqs`
+            # raised a shape-mismatch RuntimeError. Mirrors get_pos_embed_indices used by UNetT/MMDiT.
+            pos_idx = torch.arange(max_seq_len, device=text.device).clamp(max=self.precompute_max_pos - 1)
+            freqs = self.freqs_cis[pos_idx]
             if valid_pos_mask is not None:
                 freqs = freqs.unsqueeze(0) * valid_pos_mask.unsqueeze(-1).to(freqs.dtype)
             text = text + freqs
